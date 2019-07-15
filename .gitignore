@@ -54,3 +54,4 @@ dkms.conf
 export_syms
 machine
 x86
+debug_bin

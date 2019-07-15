@@ -28,6 +28,11 @@ static int vmxon(char *region)
     return error;
 }
 
+static void vmxoff(void)
+{
+    __asm__ volatile("vmxoff");
+}
+
 static void vmx_setup(void* junk)
 {
     int error = 0;
@@ -57,11 +62,11 @@ static void vmx_setup(void* junk)
     error = vmxon(vmxon_region[curcpu]);
     if(error)
     {
-        printf("vmxon failed\n");
+        printf("lhy: vmxon failed\n");
     }
     else
     {
-        printf("vmxon success\n");
+        printf("lhy: vmxon success [%d]\n", curcpu);
     }
 }
 
@@ -79,7 +84,8 @@ int vmx_init(void)
 
 static void vmx_shutdown(void *junk)
 {
-    //TODO
+    vmxoff();
+    printf("lhy: vmxoff [%d]\n", curcpu);
 }
 
 int vmx_deinit(void)
