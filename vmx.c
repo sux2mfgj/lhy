@@ -76,3 +76,15 @@ int vmx_init(void)
 
     return err;
 }
+
+static void vmx_shutdown(void *junk)
+{
+    //TODO
+}
+
+int vmx_deinit(void)
+{
+    int err = 0;
+    smp_rendezvous(NULL, vmx_shutdown, NULL, NULL);
+    return err;
+}
