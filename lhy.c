@@ -8,40 +8,60 @@
 
 #include "vmx.h"
 
-static struct cdevsw vmm_dev_sw = {
-    .d_name = "vmm_dev",
+struct lhydev_softc {
+    struct cdev *cdev;
+};
+
+static struct lhydev_softc sc;
+
+static struct cdevsw lhy_dev_sw = {
+    .d_name = "lhy_dev",
     .d_version = D_VERSION,
     //.d_ioctl = vmm
 };
 
-static int create_vmm_dev(void)
+
+static int create_lhy_dev(void)
 {
     int err = 0;
     struct cdev *cdev;
 
     //TODO
-    err = make_dev_p(MAKEDEV_CHECKNAME, &cdev, &vmm_dev_sw, NULL, UID_ROOT, GID_WHEEL, 0600, "vmm");
+    err = make_dev_p(MAKEDEV_CHECKNAME, &cdev, &lhy_dev_sw, NULL, UID_ROOT, GID_WHEEL, 0600, "lhy");
     if(err)
     {
         return err;
     }
 
+    sc.cdev = cdev;
+
     return err;
 }
 
-static int vmm_load(struct module* m, int what, void *arg)
+static int destroy_lhy_dev(void)
+{
+    int err = 0;
+    if(sc.cdev != NULL)
+    {
+        destroy_dev(sc.cdev);
+    }
+
+    return err;
+}
+
+static int lhy_load(struct module* m, int what, void *arg)
 {
     int err = 0;
     switch (what)
     {
         case MOD_LOAD:
-            printf("vmm: vmm modules is loaded\n");
+            printf("lhy: lhy modules is loaded\n");
             err = vmx_init();
             if(err)
             {
                 break;
             }
-            err = create_vmm_dev();
+            err = create_lhy_dev();
             if(err)
             {
                 vmx_deinit();
@@ -49,7 +69,9 @@ static int vmm_load(struct module* m, int what, void *arg)
             }
             break;
         case MOD_UNLOAD:
-            printf("vmm: vmm modules is unloaded\n");
+            printf("lhy: lhy modules is unloaded\n");
+            vmx_deinit();
+            destroy_lhy_dev();
             break;
         default:
             err = EOPNOTSUPP;
@@ -59,5 +81,5 @@ static int vmm_load(struct module* m, int what, void *arg)
     return (err);
 }
 
-DEV_MODULE(vmm, vmm_load, NULL);
-MODULE_VERSION(vmm, 0);
+DEV_MODULE(lhy, lhy_load, NULL);
+MODULE_VERSION(lhy, 0);
