@@ -4,6 +4,7 @@
 #include <sys/kernel.h>
 #include <sys/smp.h>
 #include <sys/pcpu.h>
+#include <sys/malloc.h>
 
 #include <vm/vm.h>
 #include <vm/pmap.h>
@@ -13,7 +14,14 @@
 
 #include "vmx.h"
 
+struct vmcs {
+    uint32_t revision_id;
+    uint32_t abort_code;
+    char data[PAGE_SIZE - sizeof(uint32_t) * 2];
+};
+
 static uint8_t vmxon_region[4][PAGE_SIZE] __aligned(PAGE_SIZE);
+static struct vmcs* guest_vmcs;
 
 static int vmxon(char *region)
 {
@@ -31,6 +39,19 @@ static int vmxon(char *region)
 static void vmxoff(void)
 {
     __asm__ volatile("vmxoff");
+}
+
+static int vmclear(struct vmcs* region)
+{
+    uint8_t error;
+    uint64_t pa_region;
+
+    pa_region = vtophys(region);
+
+    //__asm__ volatile("vmclear %1; setna %0" : "=r"(error) : "m"(pa_region));
+    __asm__ volatile("vmclear %1; setna %0" : "=r"(error) : "m"(*(uint64_t *)&pa_region));
+
+    return error;
 }
 
 static void vmx_setup(void* junk)
@@ -82,6 +103,33 @@ int vmx_init(void)
     return err;
 }
 
+static MALLOC_DEFINE(M_LHY, "lhy", "a lightweight hypervisor");
+int vmx_vm_init(void)
+{
+    int err = 0;
+    uint32_t revision_id;
+
+    guest_vmcs = malloc(sizeof(struct vmcs), M_LHY, M_ZERO);
+    if((uintptr_t)guest_vmcs & PAGE_MASK)
+    {
+        printf("lhy: vmcs area should be aligned page size");
+        return -1;
+    }
+
+    revision_id = rdmsr(MSR_VMX_BASIC) & 0xffffffff;
+    guest_vmcs->revision_id = revision_id;
+
+    err = vmclear(guest_vmcs);
+    if(err)
+    {
+        printf("lhy: vmclear failed\n");
+        return err;
+    }
+
+    //TODO
+    return err;
+}
+
 static void vmx_shutdown(void *junk)
 {
     vmxoff();
@@ -91,6 +139,15 @@ static void vmx_shutdown(void *junk)
 int vmx_deinit(void)
 {
     int err = 0;
+    if(guest_vmcs != NULL)
+    {
+        err = vmclear(guest_vmcs);
+        if(err) {}
+        free(guest_vmcs, M_LHY);
+        guest_vmcs = NULL;
+        printf("lhy: guest_vmcs clear and free\n");
+    }
+
     smp_rendezvous(NULL, vmx_shutdown, NULL, NULL);
     return err;
 }

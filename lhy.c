@@ -22,6 +22,12 @@ static int lhydev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag, 
     {
         case LHY_DEBUG:
             printf("lhy: ioctl [debug]\n");
+            err = vmx_vm_init();
+            if(err)
+            {
+                printf("lhy: vmx_vm_init failed\n");
+                break;
+            }
             //TODO
 
             break;
@@ -44,7 +50,6 @@ static int create_lhy_dev(void)
     int err = 0;
     struct cdev *cdev;
 
-    //TODO
     err = make_dev_p(MAKEDEV_CHECKNAME, &cdev, &lhy_dev_sw, NULL, UID_ROOT, GID_WHEEL, 0600, "lhy");
     if(err)
     {
