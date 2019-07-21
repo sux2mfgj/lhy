@@ -24,7 +24,7 @@ uint64_t __read_cr4(void)
 uint64_t __read_dr7(void)
 {
     uint64_t dr7;
-    __asm__ volatile("mov %%cr7, %0" : "=r"(dr7));
+    __asm__ volatile("mov %%dr7, %0" : "=r"(dr7));
     return dr7;
 }
 
