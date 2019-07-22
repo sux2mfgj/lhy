@@ -292,6 +292,8 @@ static int setup_vmcs_guest_non_register_state(void)
     return err;
 }
 
+
+
 static int setup_vmcs_guest_field(uint64_t rip, uint64_t rsp)
 {
     int err = 0;
@@ -309,6 +311,90 @@ static int setup_vmcs_guest_field(uint64_t rip, uint64_t rsp)
     if(err)
     {
         printf("lhy: failed. [guest non-register state]\n");
+    }
+
+    return err;
+}
+
+static int setup_vmcs_host_field(uint64_t rip, uint64_t rsp)
+{
+    int err = 0;
+
+    uint64_t cr0 = __read_cr0();
+    uint64_t cr3 = __read_cr3();
+    uint64_t cr4 = __read_cr4();
+
+    err |= vmwrite(HOST_CR0, cr0);
+    err |= vmwrite(HOST_CR3, cr3);
+    err |= vmwrite(HOST_CR4, cr4);
+
+    if(err)
+    {
+        printf("lhy: failed. [host control registers]\n");
+        return err;
+    }
+
+    err |= vmwrite(HOST_RIP, rip);
+    err |= vmwrite(HOST_RSP, rip);
+
+    if(err)
+    {
+        printf("lhy: failed. [host rip and rsp]\n");
+        return err;
+    }
+
+
+	uint16_t es = __read_es();
+	uint16_t cs = __read_cs();
+	uint16_t ss = __read_ss();
+	uint16_t ds = __read_ds();
+	uint16_t fs = __read_fs();
+	uint16_t gs = __read_gs();
+	uint16_t tr = __read_tr();
+
+    err |= vmwrite(HOST_ES_SELECTOR, es);
+    err |= vmwrite(HOST_CS_SELECTOR, cs);
+    err |= vmwrite(HOST_SS_SELECTOR, ss);
+    err |= vmwrite(HOST_DS_SELECTOR, ds);
+    err |= vmwrite(HOST_FS_SELECTOR, fs);
+    err |= vmwrite(HOST_GS_SELECTOR, gs);
+    err |= vmwrite(HOST_TR_SELECTOR, tr);
+
+    if(err)
+    {
+        printf("lhy: failed. [host selectors]\n");
+        return err;
+    }
+
+    uint64_t fs_base = rdmsr(MSR_FSBASE);
+    uint64_t gs_base = (uint64_t)&__pcpu[curcpu];
+    err |= vmwrite(HOST_FS_BASE, fs_base);
+    err |= vmwrite(HOST_GS_BASE, gs_base);
+
+    uint64_t tr_base = (uint64_t)PCPU_GET(tssp);
+    err |= vmwrite(HOST_TR_BASE, tr_base);
+
+    struct region_descriptor gdt, idt;
+
+    __store_gdt(&gdt);
+    __store_idt(&idt);
+
+    err |= vmwrite(HOST_GDTR_BASE, gdt.rd_base);
+    err |= vmwrite(HOST_IDTR_BASE, idt.rd_base);
+
+    if(err)
+    {
+        printf("lhy: failed. [host base]\n");
+        return err;
+    }
+
+    err |= vmwrite(HOST_IA32_SYSENTER_CS, rdmsr(MSR_SYSENTER_CS_MSR));
+    err |= vmwrite(HOST_IA32_SYSENTER_ESP, rdmsr(MSR_SYSENTER_ESP_MSR));
+    err |= vmwrite(HOST_IA32_SYSENTER_EIP, rdmsr(MSR_SYSENTER_EIP_MSR));
+    if(err)
+    {
+        printf("lhy: failed. [host msrs]\n");
+        return err;
     }
 
     return err;
@@ -345,12 +431,21 @@ int vmx_vm_init(void)
     }
 
     // TODO
-    uintptr_t rip = 0;
-    uintptr_t rsp = 0;
-    err = setup_vmcs_guest_field(rip, rsp);
+    uintptr_t guest_rip = 0;
+    uintptr_t guest_rsp = 0;
+    err = setup_vmcs_guest_field(guest_rip, guest_rsp);
     if(err)
     {
         printf("lhy: setup failed the vmcs guest filed\n");
+    }
+
+    uintptr_t host_rip = 0;
+    uintptr_t host_rsp = 0;
+    err = setup_vmcs_host_field(host_rip, host_rsp);
+    if(err)
+    {
+        printf("lhy: failed [setup_vmcs_host field]\n");
+        return err;
     }
 
     //TODO

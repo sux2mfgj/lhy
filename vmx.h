@@ -69,6 +69,29 @@ enum vmcs_field {
     VMCS_LINK_POINTER           = 0x00002800,
 	VMCS_LINK_POINTER_HIGH      = 0x00002801,
 
+    HOST_CR0                    = 0x00006c00,
+	HOST_CR3                    = 0x00006c02,
+	HOST_CR4                    = 0x00006c04,
+	HOST_FS_BASE                = 0x00006c06,
+	HOST_GS_BASE                = 0x00006c08,
+	HOST_TR_BASE                = 0x00006c0a,
+	HOST_GDTR_BASE              = 0x00006c0c,
+	HOST_IDTR_BASE              = 0x00006c0e,
+	HOST_RSP                    = 0x00006c14,
+	HOST_RIP                    = 0x00006c16,
+    HOST_ES_SELECTOR            = 0x00000c00,
+	HOST_CS_SELECTOR            = 0x00000c02,
+	HOST_SS_SELECTOR            = 0x00000c04,
+	HOST_DS_SELECTOR            = 0x00000c06,
+	HOST_FS_SELECTOR            = 0x00000c08,
+	HOST_GS_SELECTOR            = 0x00000c0a,
+	HOST_TR_SELECTOR            = 0x00000c0c,
+
+    HOST_IA32_SYSENTER_CS       = 0x00004c00,
+    HOST_IA32_SYSENTER_ESP      = 0x00006c10,
+	HOST_IA32_SYSENTER_EIP      = 0x00006c12,
+
+
 };
 
 #endif
