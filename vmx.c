@@ -5,6 +5,7 @@
 #include <sys/smp.h>
 #include <sys/pcpu.h>
 #include <sys/malloc.h>
+#include <sys/proc.h>
 
 #include <vm/vm.h>
 #include <vm/pmap.h>
@@ -14,6 +15,9 @@
 
 #include "vmx.h"
 #include "x64.h"
+
+struct pcpu;
+extern struct pcpu __pcpu[];
 
 struct vmcs {
     uint32_t revision_id;
@@ -122,15 +126,10 @@ int vmx_init(void)
     return err;
 }
 
-int setup_vmcs_guest_field(uint64_t rip, uint64_t rsp);
-
-//static int setup_vmcs_guest_field(uint64_t rip, uint64_t rsp)
-int setup_vmcs_guest_field(uint64_t rip, uint64_t rsp)
+static int setup_vmcs_guest_register_state(uint64_t rip, uint64_t rsp)
 {
     int err = 0;
-    return err;
 
-    // 24.4.1 Guest Register State
     uint64_t cr0 = __read_cr0();
     uint64_t cr3 = __read_cr3();
     uint64_t cr4 = __read_cr4();
@@ -148,16 +147,16 @@ int setup_vmcs_guest_field(uint64_t rip, uint64_t rsp)
     }
 
     // rsp, rip and rflags
-    //uint64_t rflags = __read_rflags();
-    //err |= vmwrite(GUEST_RFLAGS, rflags);
-    //err |= vmwrite(GUEST_RIP, rip);
-    //err |= vmwrite(GUEST_RSP, rsp);
+    uint64_t rflags = __read_rflags();
+    err |= vmwrite(GUEST_RFLAGS, rflags);
+    err |= vmwrite(GUEST_RIP, rip);
+    err |= vmwrite(GUEST_RSP, rsp);
 
-    //if(err)
-    //{
-    //    printf("lhy: error occured while writing rsp, rip or rflags\n");
-    //    return err;
-    //}
+    if(err)
+    {
+        printf("lhy: error occured while writing rsp, rip or rflags\n");
+        return err;
+    }
 
 	uint16_t es = __read_es();
 	uint16_t cs = __read_cs();
@@ -168,7 +167,6 @@ int setup_vmcs_guest_field(uint64_t rip, uint64_t rsp)
 	uint16_t ldtr = __read_ldt();
 	uint16_t tr = __read_tr();
 
-    // configuration of guest state areas.
     err |= vmwrite(GUEST_ES_SELECTOR, es);
     err |= vmwrite(GUEST_CS_SELECTOR, cs);
     err |= vmwrite(GUEST_SS_SELECTOR, ss);
@@ -177,6 +175,141 @@ int setup_vmcs_guest_field(uint64_t rip, uint64_t rsp)
     err |= vmwrite(GUEST_GS_SELECTOR, gs);
     err |= vmwrite(GUEST_LDTR_SELECTOR, ldtr);
     err |= vmwrite(GUEST_TR_SELECTOR, tr);
+
+    if(err)
+    {
+        printf("lhy: failed. [selectors]\n");
+        return err;
+    }
+
+
+    err |= vmwrite(GUEST_ES_BASE, 0);
+    err |= vmwrite(GUEST_CS_BASE, 0);
+    err |= vmwrite(GUEST_SS_BASE, 0);
+    err |= vmwrite(GUEST_DS_BASE, 0);
+
+    uint64_t fs_base = rdmsr(MSR_FSBASE);
+    uint64_t gs_base = (uint64_t)&__pcpu[curcpu];
+    err |= vmwrite(GUEST_FS_BASE, fs_base);
+    err |= vmwrite(GUEST_GS_BASE, gs_base);
+
+    err |= vmwrite(GUEST_LDTR_BASE, 0);
+    uint64_t tr_base = (uint64_t)PCPU_GET(tssp);
+    err |= vmwrite(GUEST_TR_BASE, tr_base);
+
+    if(err)
+    {
+        printf("lhy: failed. [base]\n");
+        return err;
+    }
+
+    uint32_t cs_limit = __load_segment_limit(cs);
+    uint32_t ss_limit = __load_segment_limit(ss);
+    uint32_t ds_limit = __load_segment_limit(ds);
+    uint32_t es_limit = __load_segment_limit(es);
+    uint32_t fs_limit = __load_segment_limit(fs);
+    uint32_t gs_limit = __load_segment_limit(gs);
+    uint32_t ldt_limit = __load_segment_limit(ldtr);
+    uint32_t tr_limit = __load_segment_limit(tr);
+
+    err |= vmwrite(GUEST_CS_LIMIT, cs_limit);
+    err |= vmwrite(GUEST_SS_LIMIT, ss_limit);
+    err |= vmwrite(GUEST_DS_LIMIT, ds_limit);
+    err |= vmwrite(GUEST_ES_LIMIT, es_limit);
+    err |= vmwrite(GUEST_FS_LIMIT, fs_limit);
+    err |= vmwrite(GUEST_GS_LIMIT, gs_limit);
+    err |= vmwrite(GUEST_LDTR_LIMIT, ldt_limit);
+    err |= vmwrite(GUEST_TR_LIMIT, tr_limit);
+
+    if(err)
+    {
+        printf("lhy: failed. [limit]\n");
+        return err;
+    }
+
+    uint32_t cs_ar = __load_access_right(cs);
+    uint32_t ss_ar = __load_access_right(ss);
+    uint32_t ds_ar = __load_access_right(ds);
+    uint32_t es_ar = __load_access_right(es);
+    uint32_t fs_ar = __load_access_right(fs);
+    uint32_t gs_ar = __load_access_right(gs);
+    uint32_t ldt_ar = __load_access_right(ldtr);
+    uint32_t tr_ar = __load_access_right(tr);
+
+    err |= vmwrite(GUEST_CS_AR, cs_ar);
+    err |= vmwrite(GUEST_SS_AR, ss_ar);
+    err |= vmwrite(GUEST_DS_AR, ds_ar);
+    err |= vmwrite(GUEST_ES_AR, es_ar);
+    err |= vmwrite(GUEST_FS_AR, fs_ar);
+    err |= vmwrite(GUEST_GS_AR, gs_ar);
+    err |= vmwrite(GUEST_LDTR_AR, ldt_ar);
+    err |= vmwrite(GUEST_TR_AR, tr_ar);
+
+    if(err)
+    {
+        printf("lhy: failed. [access right]\n");
+        return err;
+    }
+
+
+    struct region_descriptor gdt, idt;
+
+    __store_gdt(&gdt);
+    __store_idt(&idt);
+
+    err |= vmwrite(GUEST_GDTR_BASE, gdt.rd_base);
+    err |= vmwrite(GUEST_IDTR_BASE, idt.rd_base);
+
+    if(err)
+    {
+        printf("lhy: failed. [gdt and idt]\n");
+        return err;
+    }
+
+    err |= vmwrite(GUEST_IA32_DEBUGCTL, rdmsr(MSR_DEBUGCTLMSR));
+    err |= vmwrite(GUEST_IA32_SYSENTER_CS, rdmsr(MSR_SYSENTER_CS_MSR));
+    err |= vmwrite(GUEST_IA32_SYSENTER_ESP, rdmsr(MSR_SYSENTER_ESP_MSR));
+    err |= vmwrite(GUEST_IA32_SYSENTER_EIP, rdmsr(MSR_SYSENTER_EIP_MSR));
+
+    if(err)
+    {
+        printf("lhy: failed. [msrs]\n");
+        return err;
+    }
+
+    return err;
+}
+
+static int setup_vmcs_guest_non_register_state(void)
+{
+    int err = 0;
+
+    err |= vmwrite(GUEST_ACTIVITY_STATE, 0); // 0 means the guest is active.
+    err |= vmwrite(GUEST_INTERRUPTIBILITY_INFO, 0); // clear. no interrupt occured.
+    err |= vmwrite(GUEST_PENDING_DBG_EXCPT, 0);
+	err |= vmwrite(VMCS_LINK_POINTER, ~0ULL);
+
+    return err;
+}
+
+static int setup_vmcs_guest_field(uint64_t rip, uint64_t rsp)
+{
+    int err = 0;
+
+    // 24.4.1 Guest Register State
+    err = setup_vmcs_guest_register_state(rip, rsp);
+    if(err)
+    {
+        printf("lhy: failed. [guest_register_state]\n");
+        return err;
+    }
+
+    // 24.4.2 Guest Non-Register State
+    err = setup_vmcs_guest_non_register_state();
+    if(err)
+    {
+        printf("lhy: failed. [guest non-register state]\n");
+    }
 
     return err;
 }

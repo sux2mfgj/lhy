@@ -108,3 +108,18 @@ uint32_t __load_access_right(uint32_t selector)
     return access_right;
 }
 
+void __store_gdt(struct region_descriptor* addr)
+{
+    char *tmp;
+    tmp = (char *)addr;
+
+	__asm__ volatile("sgdt %0" : "=m" (*tmp) : : "memory");
+}
+
+void __store_idt(struct region_descriptor* addr)
+{
+    char *tmp;
+    tmp = (char *)addr;
+
+	__asm__ volatile("sidt %0" : "=m" (*tmp) : : "memory");
+}
