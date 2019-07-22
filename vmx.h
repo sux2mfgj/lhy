@@ -91,7 +91,27 @@ enum vmcs_field {
     HOST_IA32_SYSENTER_ESP      = 0x00006c10,
 	HOST_IA32_SYSENTER_EIP      = 0x00006c12,
 
+    PIN_BASED_VM_EXEC_CONTROL   = 0x00004000,
+    CPU_BASED_VM_EXEC_CONTROL   = 0x00004002,
+    SECONDARY_VM_EXEC_CONTROL   = 0x0000401e,
+    VM_EXIT_CONTROLS            = 0x0000400c,
+    VM_ENTRY_CONTROLS           = 0x00004012,
 
 };
+
+// VMX_BASIC fileds
+#define VMX_BASIC_TRUE_CTLS		(1ULL << 55)
+
+
+// processor-based vm-execution controls
+#define CPU_BASED_HLT_EXITING                   0x00000080
+#define CPU_BASED_ACTIVATE_SECONDARY_CONTROLS   0x80000000
+
+// vm-exit controls
+#define VM_EXIT_HOST_ADDR_SPACE_SIZE            0x00000200
+
+//vm-entry controls
+#define VM_ENTRY_IA32E_MODE                     0x00000200
+
 
 #endif

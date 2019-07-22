@@ -292,8 +292,6 @@ static int setup_vmcs_guest_non_register_state(void)
     return err;
 }
 
-
-
 static int setup_vmcs_guest_field(uint64_t rip, uint64_t rsp)
 {
     int err = 0;
@@ -400,6 +398,61 @@ static int setup_vmcs_host_field(uint64_t rip, uint64_t rsp)
     return err;
 }
 
+static void adjust_control_value(uint32_t msr, uint32_t offset, uint32_t* value)
+{
+    uint64_t msr_val = rdmsr(msr + offset);
+    printf("lhy: msr_val 0x%lx\n", msr_val);
+    //*value &= (uint32_t)(msr_val >> 32);
+    //*value |= (uint32_t)msr_val;
+}
+
+static int setup_vmcs_vm_execution_control_fields(void)
+{
+    int err = 0;
+
+    uint64_t vmx_basic = rdmsr(MSR_VMX_BASIC);
+    uint32_t msr_true_offset = 0;
+    if(vmx_basic & VMX_BASIC_TRUE_CTLS)
+    {
+        msr_true_offset = 0xc;
+    }
+
+    // 24.6 vm execution control fields
+    uint32_t pin_based_vm_exec_ctrls = 0;
+    adjust_control_value(MSR_VMX_PINBASED_CTLS, msr_true_offset, &pin_based_vm_exec_ctrls);
+
+    uint32_t cpu_based_vm_exec_ctrls = CPU_BASED_HLT_EXITING;
+        //CPU_BASED_HLT_EXITING | CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
+    adjust_control_value(MSR_VMX_PROCBASED_CTLS, msr_true_offset,
+            &cpu_based_vm_exec_ctrls);
+
+    //uint32_t second_cpu_based_vm_exec_ctrols = 0;
+    //adjust_control_value(MSR_VMX_PROCBASED_CTLS2, msr_true_offset,
+    //        &second_cpu_based_vm_exec_ctrols);
+
+    // 24.7 vm-exit control fields
+    uint32_t vm_exit_ctrls = VM_EXIT_HOST_ADDR_SPACE_SIZE;
+    adjust_control_value(MSR_VMX_EXIT_CTLS, msr_true_offset, &vm_exit_ctrls);
+
+    // 24.7 vm-entry control fields
+    uint32_t vm_entry_ctrls = VM_ENTRY_IA32E_MODE;
+    adjust_control_value(MSR_VMX_ENTRY_CTLS, msr_true_offset, &vm_entry_ctrls);
+
+    //err |= vmwrite(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_ctrls);
+    //err |= vmwrite(CPU_BASED_VM_EXEC_CONTROL, cpu_based_vm_exec_ctrls);
+    //err |= vmwrite(SECONDARY_VM_EXEC_CONTROL, second_cpu_based_vm_exec_ctrols);
+    //err |= vmwrite(VM_EXIT_CONTROLS, vm_exit_ctrls);
+    //err |= vmwrite(VM_ENTRY_CONTROLS, vm_entry_ctrls);
+
+    if(err)
+    {
+        printf("lhy: failed. [vm {pin,cpu,2nd,entry,exit} control]\n");
+        return err;
+    }
+
+    return err;
+}
+
 static MALLOC_DEFINE(M_LHY, "lhy", "a lightweight hypervisor");
 int vmx_vm_init(void)
 {
@@ -445,6 +498,14 @@ int vmx_vm_init(void)
     if(err)
     {
         printf("lhy: failed [setup_vmcs_host field]\n");
+        return err;
+    }
+
+    // 24.{6,7,8,9}
+    err = setup_vmcs_vm_execution_control_fields();
+    if(err)
+    {
+        printf("lhy: failed. [setup_vmcs_vm_execution_control_fields]\n");
         return err;
     }
 
