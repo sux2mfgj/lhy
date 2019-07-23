@@ -426,6 +426,8 @@ static int setup_vmcs_vm_execution_control_fields(void)
     adjust_control_value(MSR_VMX_PROCBASED_CTLS, msr_true_offset,
             &cpu_based_vm_exec_ctrls);
 
+    // XXX: below code, rdmsr(MSR_VMX_PROCBASED_CTLS2) in adjust_control_value,
+    //      cause exception and panic the kernel. why..
     //uint32_t second_cpu_based_vm_exec_ctrols = 0;
     //adjust_control_value(MSR_VMX_PROCBASED_CTLS2, msr_true_offset,
     //        &second_cpu_based_vm_exec_ctrols);
@@ -434,19 +436,34 @@ static int setup_vmcs_vm_execution_control_fields(void)
     uint32_t vm_exit_ctrls = VM_EXIT_HOST_ADDR_SPACE_SIZE;
     adjust_control_value(MSR_VMX_EXIT_CTLS, msr_true_offset, &vm_exit_ctrls);
 
-    // 24.7 vm-entry control fields
+    // 24.8 vm-entry control fields
     uint32_t vm_entry_ctrls = VM_ENTRY_IA32E_MODE;
     adjust_control_value(MSR_VMX_ENTRY_CTLS, msr_true_offset, &vm_entry_ctrls);
 
-    //err |= vmwrite(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_ctrls);
-    //err |= vmwrite(CPU_BASED_VM_EXEC_CONTROL, cpu_based_vm_exec_ctrls);
+    err |= vmwrite(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_ctrls);
+    err |= vmwrite(CPU_BASED_VM_EXEC_CONTROL, cpu_based_vm_exec_ctrls);
     //err |= vmwrite(SECONDARY_VM_EXEC_CONTROL, second_cpu_based_vm_exec_ctrols);
-    //err |= vmwrite(VM_EXIT_CONTROLS, vm_exit_ctrls);
-    //err |= vmwrite(VM_ENTRY_CONTROLS, vm_entry_ctrls);
+    err |= vmwrite(VM_EXIT_CONTROLS, vm_exit_ctrls);
+    err |= vmwrite(VM_ENTRY_CONTROLS, vm_entry_ctrls);
 
     if(err)
     {
         printf("lhy: failed. [vm {pin,cpu,2nd,entry,exit} control]\n");
+        return err;
+    }
+
+    //24.8.2 vm-entry controls for MSRs
+    err |= vmwrite(VM_ENTRY_MSR_LOAD_COUNT, 0);
+    err |= vmwrite(VM_ENTRY_MSR_LOAD_ADDR, 0);
+
+    //24.8.3
+    err |= vmwrite(VM_ENTRY_INTR_INFO_FIELD, 0);
+    err |= vmwrite(VM_ENTRY_EXCEP_ERROR_CODE, 0);
+    err |= vmwrite(VM_ENTRY_INTR_INFO_FIELD, 0);
+
+    if(err)
+    {
+        printf("lhy: failed [vm-entry fields]\n");
         return err;
     }
 
