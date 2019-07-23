@@ -16,6 +16,11 @@
 #include "vmx.h"
 #include "x64.h"
 
+extern void* guest_entry;
+
+static uint8_t guest_stack[PAGE_SIZE] __aligned(PAGE_SIZE);
+static uint8_t host_stack[PAGE_SIZE] __aligned(PAGE_SIZE);
+
 struct pcpu;
 extern struct pcpu __pcpu[];
 
@@ -24,6 +29,9 @@ struct vmcs {
     uint32_t abort_code;
     char data[PAGE_SIZE - sizeof(uint32_t) * 2];
 };
+
+//static struct vmx_host_state host_state;
+//static struct vmx_guest_state guest_state;
 
 static uint8_t vmxon_region[4][PAGE_SIZE] __aligned(PAGE_SIZE);
 static struct vmcs* guest_vmcs;
@@ -292,6 +300,9 @@ static int setup_vmcs_guest_non_register_state(void)
     return err;
 }
 
+int vmx_entry_guest(struct vmx_host_state* hstate);
+int vmx_exit_guest(void);
+
 static int setup_vmcs_guest_field(uint64_t rip, uint64_t rsp)
 {
     int err = 0;
@@ -309,6 +320,7 @@ static int setup_vmcs_guest_field(uint64_t rip, uint64_t rsp)
     if(err)
     {
         printf("lhy: failed. [guest non-register state]\n");
+        return err;
     }
 
     return err;
@@ -402,8 +414,8 @@ static void adjust_control_value(uint32_t msr, uint32_t offset, uint32_t* value)
 {
     uint64_t msr_val = rdmsr(msr + offset);
     printf("lhy: msr_val 0x%lx\n", msr_val);
-    //*value &= (uint32_t)(msr_val >> 32);
-    //*value |= (uint32_t)msr_val;
+    *value &= (uint32_t)(msr_val >> 32);
+    *value |= (uint32_t)msr_val;
 }
 
 static int setup_vmcs_vm_execution_control_fields(void)
@@ -501,16 +513,16 @@ int vmx_vm_init(void)
     }
 
     // TODO
-    uintptr_t guest_rip = 0;
-    uintptr_t guest_rsp = 0;
+    uintptr_t guest_rip = (uintptr_t)guest_entry;
+    uintptr_t guest_rsp = (uintptr_t)guest_stack + PAGE_SIZE;
     err = setup_vmcs_guest_field(guest_rip, guest_rsp);
     if(err)
     {
         printf("lhy: setup failed the vmcs guest filed\n");
     }
 
-    uintptr_t host_rip = 0;
-    uintptr_t host_rsp = 0;
+    uintptr_t host_rip = (uintptr_t)vmx_exit_guest;
+    uintptr_t host_rsp = (uintptr_t)host_stack + PAGE_SIZE;
     err = setup_vmcs_host_field(host_rip, host_rsp);
     if(err)
     {
@@ -526,8 +538,9 @@ int vmx_vm_init(void)
         return err;
     }
 
-    //TODO
-    return err;
+    printf("lhy: vmcs setup successed\n");
+
+    return 0;
 }
 
 static void vmx_shutdown(void *junk)

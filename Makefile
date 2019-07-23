@@ -1,4 +1,4 @@
-SRCS=lhy.c vmx.c x64.c
+SRCS=lhy.c vmx.c x64.c guest.s
 KMOD=lhy
 
 .include <bsd.kmod.mk>

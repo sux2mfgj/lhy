@@ -31,6 +31,11 @@ static int lhydev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag, 
             //TODO
 
             break;
+        case LHY_VCPU_RUN:
+            printf("lhy: ioctl [vcpu_run]\n");
+            //err = 
+            break;
+
         default:
             err = EOPNOTSUPP;
             printf("lhy: ioctl [unknown cmd]\n");
