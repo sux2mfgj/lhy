@@ -16,10 +16,10 @@
 #include "vmx.h"
 #include "x64.h"
 
-extern void* guest_entry;
+void* guest_entry(void);
 
 static uint8_t guest_stack[PAGE_SIZE] __aligned(PAGE_SIZE);
-static uint8_t host_stack[PAGE_SIZE] __aligned(PAGE_SIZE);
+//static uint8_t host_stack[PAGE_SIZE] __aligned(PAGE_SIZE);
 
 struct pcpu;
 extern struct pcpu __pcpu[];
@@ -30,7 +30,7 @@ struct vmcs {
     char data[PAGE_SIZE - sizeof(uint32_t) * 2];
 };
 
-//static struct vmx_host_state host_state;
+static struct vmx_host_state host_state;
 //static struct vmx_guest_state guest_state;
 
 static uint8_t vmxon_region[4][PAGE_SIZE] __aligned(PAGE_SIZE);
@@ -62,7 +62,8 @@ static int vmclear(struct vmcs* region)
     pa_region = vtophys(region);
 
     //__asm__ volatile("vmclear %1; setna %0" : "=r"(error) : "m"(pa_region));
-    __asm__ volatile("vmclear %1; setna %0" : "=r"(error) : "m"(*(uint64_t *)&pa_region));
+    __asm__ volatile("vmclear %1; setna %0;"
+            : "=r"(error) : "m"(*(uint64_t *)&pa_region): "memory");
 
     return error;
 }
@@ -73,7 +74,8 @@ static int vmptrld(struct vmcs* region)
     uint64_t pa_region;
 
     pa_region = vtophys(region);
-    __asm__ volatile("vmptrld %1; setna %0": "=r"(error) : "m"(*(uint64_t *)&pa_region));
+    __asm__ volatile("vmptrld %1; setna %0"
+            : "=r"(error) : "m"(*(uint64_t *)&pa_region): "memory");
 
     return error;
 }
@@ -81,7 +83,16 @@ static int vmptrld(struct vmcs* region)
 static int vmwrite(uint64_t field, uint64_t value)
 {
     uint8_t error;
-    __asm__ volatile("vmwrite %2, %1; setna %0" : "=r"(error) : "r"(field), "r"(value));
+    __asm__ volatile("vmwrite %2, %1; setna %0;"
+            : "=r"(error) : "r"(field), "r"(value) : "memory");
+    return error;
+}
+
+static int vmread(uint64_t field, uint64_t *ptr)
+{
+    uint8_t error;
+    __asm__ volatile("vmread %1, %2; setna %0;"
+            : "=r"(error) : "r"(field), "m"(*ptr): "memory");
     return error;
 }
 
@@ -134,6 +145,118 @@ int vmx_init(void)
     return err;
 }
 
+static int vmcs_dump(void)
+{
+    int err = 0;
+
+    uint64_t val;
+
+    err |= vmread(GUEST_ES_SELECTOR, &val);
+    printf("lhy: es selector:    %lx\n", val);
+
+    err |= vmread(GUEST_CS_SELECTOR, &val);
+    printf("lhy: cs selector:    %lx\n", val);
+
+    err |= vmread(GUEST_SS_SELECTOR, &val);
+    printf("lhy: ss selector:    %lx\n", val);
+
+    err |= vmread(GUEST_DS_SELECTOR, &val);
+    printf("lhy: ds selector:    %lx\n", val);
+
+    err |= vmread(GUEST_FS_SELECTOR, &val);
+    printf("lhy: fs selector:    %lx\n", val);
+
+    err |= vmread(GUEST_GS_SELECTOR, &val);
+    printf("lhy: gs selector:    %lx\n", val);
+
+    err |= vmread(GUEST_LDTR_SELECTOR, &val);
+    printf("lhy: ldtr selector:  %lx\n", val);
+
+    err |= vmread(GUEST_TR_SELECTOR, &val);
+    printf("lhy: tr selector:    %lx\n", val);
+
+    if(err)
+    {
+        printf("failed the vmread. [guest selector]\n");
+        return err;
+    }
+
+    err |= vmread(GUEST_CR0, &val);
+    printf("lhy: cr0:       %lx\n", val);
+
+    err |= vmread(GUEST_CR3, &val);
+    printf("lhy: cr3:       %lx\n", val);
+
+    err |= vmread(GUEST_CR4, &val);
+    printf("lhy: cr4:       %lx\n", val);
+
+    err |= vmread(GUEST_RFLAGS, &val);
+    printf("lhy: rflags:    %lx\n", val);
+
+    err |= vmread(GUEST_RIP, &val);
+    printf("lhy: rip:       %lx\n", val);
+
+    err |= vmread(GUEST_RSP, &val);
+    printf("lhy: RSP:       %lx\n", val);
+
+    err |= vmread(GUEST_ES_BASE, &val);
+    printf("lhy: ES_BASE    %lx\n", val);
+
+    err |= vmread(GUEST_CS_BASE, &val);
+    printf("lhy: CS_BASE    %lx\n", val);
+
+    err |= vmread(GUEST_SS_BASE, &val);
+    printf("lhy: SS_BASE    %lx\n", val);
+
+    err |= vmread(GUEST_DS_BASE, &val);
+    printf("lhy: DS_BASE    %lx\n", val);
+
+    err |= vmread(GUEST_FS_BASE, &val);
+    printf("lhy: FS_BASE    %lx\n", val);
+
+    err |= vmread(GUEST_GS_BASE, &val);
+    printf("lhy: GS_BASE    %lx\n", val);
+
+    err |= vmread(GUEST_LDTR_BASE, &val);
+    printf("lhy: LDTR_BASE  %lx\n", val);
+
+    err |= vmread(GUEST_TR_BASE, &val);
+    printf("lhy: TR_BASE    %lx\n", val);
+
+    if(err)
+    {
+        printf("lhy: TODO\n");
+        return err;
+    }
+
+
+    err |= vmread(GUEST_GDTR_BASE, &val);
+    printf("lhy: gdt base   %lx\n", val);
+
+    err |= vmread(GUEST_IDTR_BASE, &val);
+    printf("lhy: idt base   %lx\n", val);
+
+    if(err)
+    {
+        printf("lhy: TODO\n");
+        return err;
+    }
+
+    err |= vmread(HOST_RSP, &val);
+    printf("lhy: host rsp   %lx\n", val);
+
+    err |= vmread(HOST_RIP, &val);
+    printf("lhy: host rip   %lx\n", val);
+
+    if(err)
+    {
+        printf("lhy: host regs\n");
+        return err;
+    }
+
+    return err;
+}
+
 static int setup_vmcs_guest_register_state(uint64_t rip, uint64_t rsp)
 {
     int err = 0;
@@ -166,14 +289,14 @@ static int setup_vmcs_guest_register_state(uint64_t rip, uint64_t rsp)
         return err;
     }
 
-	uint16_t es = __read_es();
-	uint16_t cs = __read_cs();
-	uint16_t ss = __read_ss();
-	uint16_t ds = __read_ds();
-	uint16_t fs = __read_fs();
-	uint16_t gs = __read_gs();
+	uint16_t es = __read_es() & 0xf8;
+	uint16_t cs = __read_cs() & 0xf8;
+	uint16_t ss = __read_ss() & 0xf8;
+	uint16_t ds = __read_ds() & 0xf8;
+	uint16_t fs = __read_fs() & 0xf8;
+	uint16_t gs = __read_gs() & 0xf8;
 	uint16_t ldtr = __read_ldt();
-	uint16_t tr = __read_tr();
+	uint16_t tr = __read_tr() & 0xf8;
 
     err |= vmwrite(GUEST_ES_SELECTOR, es);
     err |= vmwrite(GUEST_CS_SELECTOR, cs);
@@ -334,6 +457,10 @@ static int setup_vmcs_host_field(uint64_t rip, uint64_t rsp)
     uint64_t cr3 = __read_cr3();
     uint64_t cr4 = __read_cr4();
 
+    printf("lhy: cr0    %lx\n", cr0);
+    printf("lhy: cr3    %lx\n", cr3);
+    printf("lhy: cr4    %lx\n", cr4);
+
     err |= vmwrite(HOST_CR0, cr0);
     err |= vmwrite(HOST_CR3, cr3);
     err |= vmwrite(HOST_CR4, cr4);
@@ -344,8 +471,9 @@ static int setup_vmcs_host_field(uint64_t rip, uint64_t rsp)
         return err;
     }
 
+    printf("lhy: %lx %lx\n", rip, rsp);
     err |= vmwrite(HOST_RIP, rip);
-    err |= vmwrite(HOST_RSP, rip);
+    err |= vmwrite(HOST_RSP, rsp);
 
     if(err)
     {
@@ -514,15 +642,16 @@ int vmx_vm_init(void)
 
     // TODO
     uintptr_t guest_rip = (uintptr_t)guest_entry;
-    uintptr_t guest_rsp = (uintptr_t)guest_stack + PAGE_SIZE;
+    uintptr_t guest_rsp = (uintptr_t)guest_stack + PAGE_SIZE - 1;
     err = setup_vmcs_guest_field(guest_rip, guest_rsp);
     if(err)
     {
         printf("lhy: setup failed the vmcs guest filed\n");
+        return err;
     }
 
     uintptr_t host_rip = (uintptr_t)vmx_exit_guest;
-    uintptr_t host_rsp = (uintptr_t)host_stack + PAGE_SIZE;
+    uintptr_t host_rsp = (uintptr_t)&host_state;
     err = setup_vmcs_host_field(host_rip, host_rsp);
     if(err)
     {
@@ -539,6 +668,28 @@ int vmx_vm_init(void)
     }
 
     printf("lhy: vmcs setup successed\n");
+    err = vmcs_dump();
+    if(err)
+    {
+        printf("lhy: failed. [vmcs_dump]\n");
+        return err;
+    }
+
+    return 0;
+}
+
+int vmx_vcpu_run(void)
+{
+    int err = 0;
+
+    err = vmx_entry_guest(&host_state);
+    if(err)
+    {
+        printf("lhy: failed. [vmx_entry_guest]\n");
+        return err;
+    }
+
+    // TODO: read the exit reason.
 
     return 0;
 }
@@ -547,6 +698,10 @@ static void vmx_shutdown(void *junk)
 {
     vmxoff();
     printf("lhy: vmxoff [%d]\n", curcpu);
+}
+
+void debug_print(uint64_t val){
+    printf("lhy: debug_print %lx\n", val);
 }
 
 int vmx_deinit(void)

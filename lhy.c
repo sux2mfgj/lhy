@@ -33,7 +33,11 @@ static int lhydev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag, 
             break;
         case LHY_VCPU_RUN:
             printf("lhy: ioctl [vcpu_run]\n");
-            //err = 
+            err = vmx_vcpu_run();
+            if(err) {
+                printf("lhy: failed. [vmx_vcpu_run]\n");
+                break;
+            }
             break;
 
         default:

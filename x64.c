@@ -10,7 +10,10 @@ uint64_t __read_cr0(void)
 uint64_t __read_cr3(void)
 {
     uint64_t cr3;
-    __asm__ volatile("mov %%cr3, %0": "=r"(cr3));
+    __asm__ volatile(
+            "movq %%cr3, %%rax\n\t"
+            "movq %%rax, %0\n\t"
+            : "=m"(cr3) :: "%rax");
     return cr3;
 }
 

@@ -1,3 +1,7 @@
+#include <machine/asmacros.h>
+#include <machine/asm.h>
+#include <machine/specialreg.h>
+
 .text
 .globl guest_entry
 
@@ -10,6 +14,7 @@ guest_entry:
 // int vmx_entry_guest(struct vmx_host_state* hstate);
 // %rdi: struct vmx_host_state*
 vmx_entry_guest:
+    cli
     movq %r15, 0(%rdi)
     movq %r14, 8(%rdi)
     movq %r13, 16(%rdi)
@@ -20,16 +25,19 @@ vmx_entry_guest:
     pushq %rdi
 
     vmlaunch
+
     setbe %dil
     movq %rax, %rax
     movb %dil, %al
 
     ret
 
-.globl
+
+.globl vmx_exit_guest
 // int vmx_exit_guest(void);
 vmx_exit_guest:
-    popq %rdi
+    movq %rsp, %rdi
+
     movq 0(%rdi), %r15
     movq 8(%rdi), %r14
     movq 16(%rdi), %r13
@@ -40,5 +48,6 @@ vmx_exit_guest:
 
     movq $0, %rax
 
-    ret
+    sti
 
+    ret
