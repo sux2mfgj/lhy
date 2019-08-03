@@ -16,7 +16,7 @@
 #include "vmx.h"
 #include "x64.h"
 
-void* guest_entry(void);
+void guest_entry(void);
 
 static uint8_t guest_stack[PAGE_SIZE] __aligned(PAGE_SIZE);
 //static uint8_t host_stack[PAGE_SIZE] __aligned(PAGE_SIZE);
@@ -30,7 +30,7 @@ struct vmcs {
     char data[PAGE_SIZE - sizeof(uint32_t) * 2];
 };
 
-static struct vmx_host_state host_state;
+static struct vmx_host_state host_state __aligned(0x10);
 //static struct vmx_guest_state guest_state;
 
 static uint8_t vmxon_region[4][PAGE_SIZE] __aligned(PAGE_SIZE);
@@ -423,7 +423,7 @@ static int setup_vmcs_guest_non_register_state(void)
     return err;
 }
 
-int vmx_entry_guest(struct vmx_host_state* hstate);
+extern int vmx_entry_guest(struct vmx_host_state* hstate);
 int vmx_exit_guest(void);
 
 static int setup_vmcs_guest_field(uint64_t rip, uint64_t rsp)
@@ -642,7 +642,7 @@ int vmx_vm_init(void)
 
     // TODO
     uintptr_t guest_rip = (uintptr_t)guest_entry;
-    uintptr_t guest_rsp = (uintptr_t)guest_stack + PAGE_SIZE - 1;
+    uintptr_t guest_rsp = (uintptr_t)guest_stack + PAGE_SIZE - 8; // - 0x10;
     err = setup_vmcs_guest_field(guest_rip, guest_rsp);
     if(err)
     {
@@ -682,12 +682,56 @@ int vmx_vcpu_run(void)
 {
     int err = 0;
 
-    err = vmx_entry_guest(&host_state);
+    //err = vmx_entry_guest(&host_state);
+
+    __cli();
+    __asm__ volatile(
+            "movq %%r15, 0x00(%1);"
+            "movq %%r14, 0x08(%1);"
+            "movq %%r13, 0x10(%1);"
+            "movq %%r12, 0x16(%1);"
+            "movq %%rbp, 0x20(%1);"
+            "movq %%rsp, 0x28(%1);"
+            "movq %%rbx, 0x30(%1);"
+            "movq %%rdi, %%rsp;"
+            "vmlaunch;"
+            "movl $1, %0;"
+            "jmp .launch_failed;"
+            ".globl vmx_exit_guest;"
+            "vmx_exit_guest:;"
+            "movq %%rsp, %%rdi;"
+            "movq 0x00(%%rdi), %%r15;"
+            "movq 0x08(%%rdi), %%r14;"
+            "movq 0x10(%%rdi), %%r13;"
+            "movq 0x18(%%rdi), %%r12;"
+            "movq 0x20(%%rdi), %%rbp;"
+            "movq 0x28(%%rdi), %%rsp;"
+            "movq 0x30(%%rdi), %%rbx;"
+            "movl $0, %0;"
+            ".a:;"
+            "jmp .a;"
+            ".launch_failed:;"
+            : "=r"(err)
+            : "r"(&host_state)
+            : "memory", "rdi", "r15", "r14", "r13", "r12", "rbp", "rsp", "rbx"
+            );
+
+
     if(err)
     {
         printf("lhy: failed. [vmx_entry_guest]\n");
+        printf("lhy: host_state\n");
+        printf("lhy: r15 %lx\n", host_state.r15);
+        printf("lhy: r14 %lx\n", host_state.r14);
+        printf("lhy: r13 %lx\n", host_state.r13);
+        printf("lhy: r12 %lx\n", host_state.r12);
+        printf("lhy: rbp %lx\n", host_state.rbp);
+        printf("lhy: rsp %lx\n", host_state.rsp);
+        printf("lhy: rbx %lx\n", host_state.rbx);
         return err;
     }
+
+    __sti();
 
     // TODO: read the exit reason.
 

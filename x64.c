@@ -126,3 +126,13 @@ void __store_idt(struct region_descriptor* addr)
 
 	__asm__ volatile("sidt %0" : "=m" (*tmp) : : "memory");
 }
+
+void __sti(void)
+{
+    __asm__ volatile("sti");
+}
+
+void __cli(void)
+{
+    __asm__ volatile("cli");
+}

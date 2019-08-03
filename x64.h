@@ -36,4 +36,7 @@ uint32_t __load_access_right(uint32_t selector);
 void __store_gdt(struct region_descriptor* addr);
 void __store_idt(struct region_descriptor* addr);
 
+void __sti(void);
+void __cli(void);
+
 #endif //__X86_H

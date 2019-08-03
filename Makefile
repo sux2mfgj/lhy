@@ -7,4 +7,4 @@ d: debug.c lhy_api.h
 	$(CC) -Og -o debug debug.c
 
 dc:
-	rm -rf debug_bin
+	rm -rf debug

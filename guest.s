@@ -10,10 +10,12 @@ guest_entry:
     hlt
     hlt
 
+    /*
 .globl vmx_entry_guest
 // int vmx_entry_guest(struct vmx_host_state* hstate);
 // %rdi: struct vmx_host_state*
 vmx_entry_guest:
+    //push %rbp
     cli
     movq %r15, 0(%rdi)
     movq %r14, 8(%rdi)
@@ -22,15 +24,20 @@ vmx_entry_guest:
     movq %rbp, 32(%rdi)
     movq %rsp, 40(%rdi)
     movq %rbx, 48(%rdi)
-    pushq %rdi
 
+    //call debug_print
+
+    //movq %rdi, %rsp
     vmlaunch
 
-    setbe %dil
-    movq %rax, %rax
-    movb %dil, %al
+    //setbe %dil
+    //movq %rax, %rax
+    //movb %dil, %al
 
-    ret
+    movq $1, %rax
+    popq %rbp
+
+    retq
 
 
 .globl vmx_exit_guest
@@ -46,8 +53,14 @@ vmx_exit_guest:
     movq 40(%rdi), %rsp
     movq 48(%rdi), %rbx
 
+    //sti
+
+    //call debug_print
+//.a:
+    //jmp .a
     movq $0, %rax
 
-    sti
+    //popq %rbp
 
-    ret
+    retq
+    */
